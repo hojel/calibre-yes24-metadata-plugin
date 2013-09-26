@@ -22,7 +22,7 @@ class YES24(Source):
     name = 'YES24'
     description = _('Downloads metadata and covers from YES24')
     author = 'Hojel'
-    version = (1, 0, 1)
+    version = (1, 0, 2)
     minimum_calibre_version = (0, 8, 0)
 
     capabilities = frozenset(['identify', 'cover'])

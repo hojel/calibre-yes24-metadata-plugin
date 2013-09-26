@@ -30,6 +30,7 @@ class Worker(Thread): # Get details
         self.relevance, self.plugin = relevance, plugin
         self.browser = browser.clone_browser()
         self.cover_url = self.yes24_id = self.isbn = None
+        self.kyobo_cover = False
 
     def run(self):
         try:
@@ -168,8 +169,13 @@ class Worker(Thread): # Get details
     def parse_authors(self, root):
         brief_nodes = root.xpath('//div[@id="title"]/p')
         if brief_nodes:
-            bgrp = brief_nodes[0].text_content().split('|')
-            return [ a.strip() for a in bgrp[0].split(',') ]
+            author_nodes = root.xpath('a[contains(@href,"author_yn=Y")]')
+            if author_nodes:
+                return [ a.text.strip() for a in author_nodes ]
+            else:
+                bgrp = brief_nodes[0].text_content().split('|')
+                author_text = bgrp[0].split(u" 저/")[0]
+                return [ a.strip() for a in author_text.split(',') ]
 
     def parse_isbn(self, root):
         detail_node = root.xpath('//dd[@class="isbn10"]/p')
@@ -177,12 +183,9 @@ class Worker(Thread): # Get details
             return detail_node[0].text.strip()
 
     def parse_publisher(self, root):
-        brief_nodes = root.xpath('//div[@id="title"]/p')
-        if brief_nodes:
-            bgrp = brief_nodes[0].text_content().split('|')
-            if len(bgrp) > 3:
-                return bgrp[-2].strip()
-            return bgrp[-1].strip()
+        publ_nodes = root.xpath('//div[@id="title"]/p/a[contains(@href,"company_yn=Y")]')
+        if publ_nodes:
+            return publ_nodes[0].text.strip()
 
     def parse_published_date(self, root):
         date_node = root.xpath('//dd[@class="pdDate"]/p')
@@ -210,7 +213,11 @@ class Worker(Thread): # Get details
         if image_node:
             page_url = image_node[0].strip()
             if page_url.endswith('/M'):
-                page_url = page_url.replace('/M','/L')
+                page_url = page_url[:-2]+'/L'
+            if self.kyobo_cover:
+                new_cover = self._kyobo_hires_image(self.isbn)
+                if new_cover:
+                    page_url = new_cover
             print("Cover URL: ", page_url)
             if self.yes24_id:
                 self.plugin.cache_identifier_to_cover_url(self.yes24_id, page_url)
@@ -220,3 +227,14 @@ class Worker(Thread): # Get details
 
     def _is_valid_image(self, img_url):
         return True
+
+    def _kyobo_hires_image(self, isbn):
+        if len(isbn) != 13:
+        	return None
+        img_url = "http://image.kyobobook.co.kr/images/book/xlarge/{1:s}/x{0:s}.jpg".format(isbn, isbn[-3:])
+        self.log.info("try kyobo image: "+img_url)
+        try:
+            resp = self.browser.open_novisit(img_url, timeout=self.timeout)
+        except:
+            return None
+        return img_url
